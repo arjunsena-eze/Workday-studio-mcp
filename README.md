@@ -6,6 +6,26 @@ Everything runs **locally** on your machine — no network calls, no tenant cred
 
 ---
 
+## Start here (any AI tool, MCP or not)
+
+**→ [`AGENTS.md`](AGENTS.md)** is the entry point for any coding agent building or fixing a Studio
+integration with this repo as its knowledge base. Tool-agnostic: Claude Code, Codex, Cursor, Aider,
+Gemini, GLM, Kimi, or a chat session with plain file access.
+
+MCP support is not required to get value here. The knowledge is plain markdown:
+
+| File | What it is |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | Non-negotiable rules, build workflow, fix-someone-else's-integration workflow |
+| [`docs/diagnosing.md`](docs/diagnosing.md) | **Symptom-first lookup** — find your error text, get the real cause |
+| [`docs/studio-integration-patterns.md`](docs/studio-integration-patterns.md) | Curated cross-cutting rules |
+| [`learnings.md`](learnings.md) | Raw field findings, newest first; may correct the curated docs |
+
+Point any model at the repo and tell it to read `AGENTS.md`. With MCP, the same knowledge is
+indexed and searchable through `get_patterns`, `search_learnings` and `get_step_type_reference`.
+
+---
+
 ## What you get
 
 26 tools across these categories:
@@ -19,7 +39,7 @@ Everything runs **locally** on your machine — no network calls, no tenant cred
 | **Planning** | `plan_integration` — design elicitation + skeleton generator; `get_workflow` — where an integration stands and what to do next |
 | **Reference** | `get_step_type_reference` — confirmed step type docs with production XML examples; `lookup_soap_operations` — WWS service/operation lookup with WSDL links; `get_patterns` — the curated cross-integration knowledge base (diagram rules, MVEL/XSLT/RAAS idioms) by section or search |
 | **Diagnostics** | `parse_server_log` — parse a Workday integration server log from `~/Downloads` |
-| **Knowledge capture** | `log_learning` — append a discovered pattern/gotcha to the shared intake log (`learnings.md`) |
+| **Knowledge capture** | `log_learning` — append a discovered pattern/gotcha to the shared intake log (`learnings.md`); `search_learnings` — search that log by error text or category, so past findings are actually retrievable |
 
 A growing knowledge base lives at [`docs/studio-integration-patterns.md`](docs/studio-integration-patterns.md) — hard-won lessons captured from real Studio debugging sessions.
 
