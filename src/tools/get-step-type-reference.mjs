@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const REFERENCE = {
   'workday-in': {
-    description: 'Entry point of the integration. Every assembly has exactly one. Defines launch parameters (cloud:param) and the integration system declarations that control which Workday services the integration can call.\n\nCORE DECLARATIONS inside cc:integration-system:\n- cloud:report-service: Declares one or more RAAS (Report as a Service) report aliases the integration calls. Required for any workday-out-rest call that uses intsys.reportService.getExtrapath(). See XML example for alias-only vs WID-bound forms.\n- cloud:retrieval-service: Registers the integration to access documents uploaded on the integration event. Pair with vm://wcc/GetEventDocuments. Self-closing, no children.\n- cloud:listener-service: Registers the integration as a webhook/event listener. The inbound payload arrives in the wd.retrieve.variable at runtime. Self-closing, no children.\n- cloud:attribute-map-service: Credentials and config stored outside the assembly (API keys, URLs, OAuth tokens). Read at runtime via intsys.getAttribute(\'Name\'). cloud:map inside it defines bidirectional value mappings looked up via intsys.integrationMapLookup() and intsys.integrationMapReverseLookup().\n- cloud:custom-object-service: Declares Workday custom objects accessed via workday-out-rest.\n- cloud:sequence-generator-service: For auto-increment IDs via lp.getSequencedValue().\n- cloud:param: Launch parameter prompts shown when launching the integration.\n\nACCESSING LAUNCH PARAMS IN XSLT:\n1. Declare cloud:param in cc:workday-in\n2. In the first cc:async-mediation cc:steps, add cc:eval BEFORE cc:xslt-plus\n3. In cc:eval: props[\'key\'] = lp.getSimpleData(\'Param Name\') for text, lp.getDate(\'Param Name\') for dates\n4. In the XSL: declare <xsl:param name="key"/> — Studio auto-passes all props as XSL params\n\ncloud:launch-option values:\n- "required" — valid on ALL param types (text, date, boolean, enumeration, class-report-field). Forces the user to fill it in before launching.\n- "as-of-effective-date" / "as-of-entry-datetime" / "begin-effective-date" / "begin-entry-datetime" — DATE params ONLY. Auto-populates the date from the business process context. Do NOT use these on non-date params — schema validation error (confirmed Mistake #2).\n- "optional" is NOT a valid value — causes schema error.',
+    description: 'Entry point of the integration. Every assembly has exactly one. Defines launch parameters (cloud:param) and the integration system declarations that control which Workday services the integration can call.\n\nCORE DECLARATIONS inside cc:integration-system:\n- cloud:report-service: Declares one or more RAAS (Report as a Service) report aliases the integration calls. Required for any workday-out-rest call that uses intsys.reportService.getExtrapath(). See XML example for alias-only vs WID-bound forms.\n- cloud:retrieval-service: Registers the integration to access documents uploaded on the integration event. Pair with vm://wcc/GetEventDocuments. Self-closing, no children.\n- cloud:listener-service: Registers the integration as a webhook/event listener. Self-closing, no children. THE POSTED PAYLOAD IS NOT AVAILABLE AT StartHere. At the entry point wd.retrieve.variable does not exist yet and the message body holds framework state (a Get_Integration_Systems_Response envelope), NOT the posted body. The payload is stored as an event DOCUMENT and wd.retrieve.variable is the OUTPUT of retrieving it. Fetch it with: (1) cc:local-out to vm://wcc/GetEventDocuments setting ie.event.wid, (2) a cc:route whose strategy is a bare cc:doc-iterator (omit labels so every document is iterated) — this populates wd.retrieve.variable per document, (3) cc:copy input="variable" input-variable="wd.retrieve.variable" to load it into the message body. No cloud:retrieval-service declaration is needed. Reading parts[0] or wd.retrieve.variable directly at StartHere yields framework XML or an empty string, which surfaces downstream as the misleading "Trying to write END_DOCUMENT when document has no root".\n- cloud:attribute-map-service: Credentials and config stored outside the assembly (API keys, URLs, OAuth tokens). Read at runtime via intsys.getAttribute(\'Name\'). cloud:map inside it defines bidirectional value mappings looked up via intsys.integrationMapLookup() and intsys.integrationMapReverseLookup().\n- cloud:custom-object-service: Declares Workday custom objects accessed via workday-out-rest.\n- cloud:sequence-generator-service: For auto-increment IDs via lp.getSequencedValue().\n- cloud:param: Launch parameter prompts shown when launching the integration.\n\nACCESSING LAUNCH PARAMS IN XSLT:\n1. Declare cloud:param in cc:workday-in\n2. In the first cc:async-mediation cc:steps, add cc:eval BEFORE cc:xslt-plus\n3. In cc:eval: props[\'key\'] = lp.getSimpleData(\'Param Name\') for text, lp.getDate(\'Param Name\') for dates\n4. In the XSL: declare <xsl:param name="key"/> — Studio auto-passes all props as XSL params\n\ncloud:launch-option values:\n- "required" — valid on ALL param types (text, date, boolean, enumeration, class-report-field). Forces the user to fill it in before launching.\n- "as-of-effective-date" / "as-of-entry-datetime" / "begin-effective-date" / "begin-entry-datetime" — DATE params ONLY. Auto-populates the date from the business process context. Do NOT use these on non-date params — schema validation error (confirmed Mistake #2).\n- "optional" is NOT a valid value — causes schema error.',
     routes_via: 'routes-to',
     xml_example: `<!-- ASSEMBLY.XML -->
 <cc:workday-in id="StartHere" routes-to="BuildRequest">
@@ -104,11 +104,30 @@ const REFERENCE = {
     <cloud:retrieval-service name="INT999_Retrieval"/>
 
     <!-- Listener service: registers this integration as a webhook/event receiver.
-         The inbound payload arrives in the 'wd.retrieve.variable' at runtime.
+         The posted payload is an event DOCUMENT — it is NOT in the message body and
+         NOT in wd.retrieve.variable at StartHere. See the retrieval chain below.
          Self-closing — no child elements. -->
     <cloud:listener-service name="INT999_Listener_Service"/>
   </cc:integration-system>
 </cc:workday-in>
+
+<!-- ── Retrieving a listener payload (or any event document) ─────────────
+  Required for cloud:listener-service. Reading parts[0] at StartHere returns
+  Workday's Get_Integration_Systems_Response envelope, not the posted body. -->
+<cc:local-out id="GetEventDocuments" routes-response-to="IterateDocs"
+  endpoint="vm://wcc/GetEventDocuments">
+  <cc:set name="ie.event.wid" value="lp.isSet() ? lp.getIntegrationEventWID() : null"/>
+</cc:local-out>
+<cc:route id="IterateDocs">
+  <cc:doc-iterator/>                          <!-- omit labels: iterate ALL documents -->
+  <cc:sub-route name="EachDocument" routes-to="ParsePayload"/>
+</cc:route>
+<cc:async-mediation id="ParsePayload" routes-to="NextStep">
+  <cc:steps>
+    <!-- Loads the document into the message body. Only now is it readable. -->
+    <cc:copy id="LoadDoc" input="variable" input-variable="wd.retrieve.variable"/>
+  </cc:steps>
+</cc:async-mediation>
 
 <!-- cc:eval captures launch params into props BEFORE the cc:xslt-plus.
      Studio then passes props as XSL stylesheet parameters automatically. -->

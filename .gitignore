@@ -14,6 +14,11 @@ src/tools/launch-integration-event.mjs
 src/tools/watch-integration-event.mjs
 src/tools/fetch-server-log.mjs
 
+# Private learnings overlay — client-specific findings, never committed.
+# search_learnings reads this alongside the public learnings.md and labels
+# results [LOCAL]; log_learning writes here on visibility="private".
+learnings.local.md
+
 # Local credential store (never commit)
 .studio-mcp/
 credentials.json

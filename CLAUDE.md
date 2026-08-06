@@ -2,6 +2,11 @@
 
 This file is loaded automatically by Claude Code (and respected by Claude.ai when this repo is the active context). It tells Claude how to work in this codebase and — more importantly — how to keep the shared knowledge base growing.
 
+> **Building or fixing a Studio integration rather than working on this server? Read [`AGENTS.md`](AGENTS.md) first.**
+> It is the tool-agnostic entry point covering the non-negotiable rules for Studio work, how to
+> reach this repo's knowledge with or without MCP support, and the diagnosis workflow. This file
+> is about contributing to the MCP itself — a different job. Both apply if you are doing both.
+
 ---
 
 ## What this repo is
