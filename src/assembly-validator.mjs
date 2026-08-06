@@ -7,9 +7,16 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { checkSequenceOrder, checkMvelBraces } from './schema-validator.mjs';
 
 export function validateAssembly(xml, wsDir = null, diagramXml = null) {
   const issues = [];
+
+  // Schema-derived checks (data/studio-schema-model.json). These catch the two
+  // classes Studio rejects on open that rule-based inspection below cannot see:
+  // xsd:sequence child order, and brace balance in MVELTemplateType values.
+  checkSequenceOrder(xml, issues);
+  checkMvelBraces(xml, issues);
 
   checkNoXmlComments(xml, issues);
   checkBrokenRoutes(xml, issues);
