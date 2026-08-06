@@ -92,12 +92,30 @@ A validator that silently validates nothing also reports zero errors. Before bel
 pass, feed it a known-bad input and confirm it fails. This applies to your own ad-hoc
 scripts as much as to the repo's tests.
 
-### Generalise before logging
+### Generalise before logging, or log it private
 
-`learnings.md` is **public** and shared across clients. Never log integration IDs, project
-or client names, tenant or host names, custom field names, WIDs, or run/log identifiers.
-Use `INT999` and `<TENANT>`. Describe provenance as "verified in a live run". The pattern
-is the value; where it came from is not.
+`learnings.md` is **committed and may be world-readable**. `learnings.local.md` is
+gitignored and never leaves the machine.
+
+- Generalisable pattern → `log_learning` (default `visibility: "public"`). Use `INT999`
+  and `<TENANT>`, no WIDs, no hostnames, no client or project names, no log identifiers.
+  Describe provenance as "verified in a live run".
+- Tied to one engagement, **or you are unsure** → `visibility: "private"`.
+
+A public entry containing client identifiers is **refused**, not warned about, and the
+response names what to strip. `search_learnings` reads both stores and labels private hits
+`[LOCAL]`, so nothing is lost by keeping a finding private — and `[LOCAL]` content must not
+be copied into a commit, a public entry, or a message to anyone else without scrubbing.
+
+The pattern is the value; where it came from is not.
+
+### Know which workspace you are in
+
+With more than one client workspace configured, every read and write resolves against the
+**active** one. Call `list_workspaces` before editing when a session involves more than one
+project, use `set_active_workspace` to switch deliberately, and state which workspace you
+were working in when you report back. A wrong-workspace edit is worse than a failed edit,
+because it looks like it worked.
 
 ---
 

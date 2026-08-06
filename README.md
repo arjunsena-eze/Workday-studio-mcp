@@ -26,6 +26,47 @@ indexed and searchable through `get_patterns`, `search_learnings` and `get_step_
 
 ---
 
+## Working across several clients
+
+**Workspace profiles.** Define as many as you need in `config.json` and switch without
+editing paths:
+
+```json
+{
+  "workspaces": {
+    "default": "C:\\Users\\me\\workspace",
+    "clientA": "D:\\clients\\A\\workspace"
+  },
+  "active_workspace": "default"
+}
+```
+
+Switch with the `set_active_workspace` tool, or `STUDIO_WORKSPACE=clientA`, or by editing
+`active_workspace`. `list_workspaces` shows which is live — and the startup line names the
+active profile whenever more than one is configured, because a wrong-workspace edit looks
+like it worked. The older single `workspace_path` key still works and is treated as the
+`default` profile.
+
+**Private learnings.** `learnings.md` is committed. `learnings.local.md` is **gitignored**
+and never leaves the machine — that is where client-specific findings belong:
+
+```
+log_learning  visibility="public"   → learnings.md         (generalized, committed)
+log_learning  visibility="private"  → learnings.local.md   (client detail, local only)
+```
+
+A public entry containing client identifiers — integration IDs, WIDs, tenant hostnames,
+`ccx` tenant paths, server-log IDs, emails — is **refused**, and the response names what to
+strip. `search_learnings` reads both and labels private hits `[LOCAL]`, so keeping something
+private costs you nothing in retrievability.
+
+> If this repo is public on GitHub, note that "I won't share the link" does not restrict
+> access — a public repo is world-readable, cloneable and indexable. Multi-machine access
+> does **not** require public: a private repo clones fine from anywhere you are signed in.
+> If you do client work, private is the safer default.
+
+---
+
 ## What you get
 
 26 tools across these categories:
@@ -39,7 +80,8 @@ indexed and searchable through `get_patterns`, `search_learnings` and `get_step_
 | **Planning** | `plan_integration` — design elicitation + skeleton generator; `get_workflow` — where an integration stands and what to do next |
 | **Reference** | `get_step_type_reference` — confirmed step type docs with production XML examples; `lookup_soap_operations` — WWS service/operation lookup with WSDL links; `get_patterns` — the curated cross-integration knowledge base (diagram rules, MVEL/XSLT/RAAS idioms) by section or search |
 | **Diagnostics** | `parse_server_log` — parse a Workday integration server log from `~/Downloads` |
-| **Knowledge capture** | `log_learning` — append a discovered pattern/gotcha to the shared intake log (`learnings.md`); `search_learnings` — search that log by error text or category, so past findings are actually retrievable |
+| **Knowledge capture** | `log_learning` — append a discovered pattern/gotcha to the intake log, public or private; `search_learnings` — search both logs by error text or category, so past findings are actually retrievable |
+| **Workspaces** | `list_workspaces`, `set_active_workspace` — named profiles so one clone serves several engagements |
 
 A growing knowledge base lives at [`docs/studio-integration-patterns.md`](docs/studio-integration-patterns.md) — hard-won lessons captured from real Studio debugging sessions.
 

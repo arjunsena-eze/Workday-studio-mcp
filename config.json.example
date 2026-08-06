@@ -1,5 +1,14 @@
 {
+  "_comment_workspaces": "Named workspace profiles — one clone can serve several engagements (your own workspace plus a client project dropped in for a fix). Switch with the set_active_workspace tool, or STUDIO_WORKSPACE=<name>, or by editing active_workspace. Run list_workspaces to see which is live.",
+  "workspaces": {
+    "default": "/path/to/your/Studio Workspace",
+    "clientA": "/path/to/clientA/workspace"
+  },
+  "active_workspace": "default",
+
+  "_comment_legacy": "Single-workspace form, still supported — treated as the 'default' profile. Omit it if you use 'workspaces' above.",
   "workspace_path": "/path/to/your/Studio Workspace",
+
   "max_file_size_kb": 500,
   "backup_on_write": true,
   "excluded_dirs": [".git", ".settings", "bin", "build", "node_modules", ".metadata", ".plugins"],

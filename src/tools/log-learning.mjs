@@ -1,10 +1,5 @@
 import { z } from 'zod';
-import { appendFile, access } from 'fs/promises';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const LEARNINGS_PATH = join(__dirname, '../../learnings.md');
+import { appendEntry, scanForIdentifiers, PRIVATE_PATH, PUBLIC_PATH } from '../learnings-store.mjs';
 
 export function register(server) {
   server.tool(
@@ -23,11 +18,18 @@ wrong curated answer costs a deploy cycle every time someone trusts it. Do not s
 something merely because the topic is already covered; "already documented" is only a reason \
 to skip when the existing documentation is CORRECT.
 
-PUBLIC-REPO RULE — GENERALIZE EVERY FIELD: learnings.md is published in a public repository \
-used across clients. Never include client integration IDs (use INT999), project names, \
-tenant or environment names (use <TENANT>), custom field names, or run/log identifiers. \
-Describe provenance generically ("verified in a live run", "observed in a production build") \
-— the technical pattern is the value, not where it came from.`,
+CHOOSE THE RIGHT VISIBILITY — this decides whether the entry can be published:
+  visibility="public"  (default) → learnings.md, which is COMMITTED and may be a public \
+repo. Generalized patterns ONLY: INT999 for integration IDs, <TENANT> for tenants, no WIDs, \
+no hostnames, no client or project names, no log identifiers. Describe provenance as \
+"verified in a live run".
+  visibility="private" → learnings.local.md, which is gitignored and never leaves the \
+machine. Use this for anything tied to one engagement, and whenever you are unsure. \
+search_learnings reads both, so nothing is lost by keeping a finding private.
+
+A public entry containing client identifiers is REFUSED, not warned about — the response \
+will name what to strip. Either generalize the wording and retry, or set \
+visibility="private". Prefer generalizing: the pattern is the value, the client is not.`,
     {
       title: z.string().describe('Short descriptive title, e.g. "cc:splitter cannot have routes-to attribute"'),
       category: z.enum(['Schema', 'Diagram', 'MVEL', 'XSLT', 'Assembly', 'HTTP', 'Error', 'Other'])
@@ -39,21 +41,26 @@ Describe provenance generically ("verified in a live run", "observed in a produc
         .describe('Which file(s) this should be promoted into during the next review'),
       corrects: z.string().optional()
         .describe('Set ONLY when this entry contradicts an existing curated source. Name the stale source and what it claims, e.g. "get_step_type_reference workday-in: claims the listener payload arrives in wd.retrieve.variable". Flags the entry as a correction so search_learnings surfaces it with a warning.'),
+      visibility: z.enum(['public', 'private']).optional()
+        .describe('public (default) = learnings.md, committed, generalized patterns only. private = learnings.local.md, gitignored, safe for client-specific detail. When unsure, choose private.'),
     },
-    async ({ title, category, trigger, pattern, example, promote_to, corrects }) => {
+    async ({ title, category, trigger, pattern, example, promote_to, corrects, visibility }) => {
       const date = new Date().toISOString().slice(0, 10);
+      const scope = visibility ?? 'public';
 
-      // Public repo: flag entries that look like they carry client-specific identifiers —
-      // integration IDs, tenant-like tokens, vendor-cloud environment hostnames, email addresses.
-      const CLIENT_ID_RE = new RegExp([
-        String.raw`\bINT(?!999)\d{3}[A-Za-z]?\b`,
-        String.raw`\btenant\s+[a-z][a-z0-9-]*\d[a-z0-9-]*\b`,
-        String.raw`\b[a-z0-9-]+\.boomi\.cloud\b`,
-        String.raw`\b[a-z]*train\d+\.dayforcehcm\.com\b`,
-        String.raw`\b[A-Za-z0-9._%+-]+@(?!example\.)[A-Za-z0-9-]+\.[A-Za-z]{2,}\b`,
-      ].join('|'));
-      const suspect = [title, trigger, pattern, example ?? '']
-        .some((s) => CLIENT_ID_RE.test(s));
+      // Fail closed on the public path. A warning that still writes leaves the
+      // leak in place, and a public git history cannot be quietly cleaned later.
+      const found = scanForIdentifiers(title, trigger, pattern, example, corrects);
+      if (scope === 'public' && found.length) {
+        return errorResponse(
+          'CLIENT_IDENTIFIER_IN_PUBLIC_ENTRY',
+          `Refused: this entry looks tied to one engagement (${found.join('; ')}). `
+            + 'learnings.md is committed and may be public.',
+          'Either (a) rewrite using INT999 / <TENANT> and drop WIDs, hostnames and log IDs — '
+            + 'the technical pattern is the value — or (b) retry with visibility="private" to '
+            + 'store it in learnings.local.md, which is gitignored. search_learnings reads both.',
+        );
+      }
 
       const lines = [
         `\n### [${date}] ${title}`,
@@ -77,20 +84,8 @@ Describe provenance generically ("verified in a live run", "observed in a produc
       lines.push('**Status**: raw');
       lines.push('');
 
-      const entry = lines.join('\n');
-
       try {
-        await access(LEARNINGS_PATH);
-      } catch {
-        return errorResponse(
-          'LEARNINGS_NOT_FOUND',
-          `learnings.md not found at ${LEARNINGS_PATH}`,
-          'Make sure the MCP repo is intact. learnings.md should be in the repo root.'
-        );
-      }
-
-      try {
-        await appendFile(LEARNINGS_PATH, entry, 'utf8');
+        const path = await appendEntry(scope, lines.join('\n'));
         return {
           content: [{
             type: 'text',
@@ -98,23 +93,35 @@ Describe provenance generically ("verified in a live run", "observed in a produc
               logged: true,
               title,
               date,
+              visibility: scope,
+              file: scope === 'private' ? 'learnings.local.md' : 'learnings.md',
               promote_to,
               ...(corrects && { corrects }),
-              ...(suspect && {
-                warning: 'Entry may contain client-specific identifiers (integration ID or tenant name). '
-                  + 'This file is published publicly — edit the entry in learnings.md to use INT999/<TENANT> placeholders.',
-              }),
-              message: `Logged to learnings.md. Ask the user to commit this so the team benefits from it.`,
+              ...(scope === 'private'
+                ? {
+                  message: 'Logged to learnings.local.md (gitignored — stays on this machine). '
+                    + 'If the underlying pattern generalizes, consider also logging a scrubbed '
+                    + 'version with visibility="public" so it survives to other machines.',
+                }
+                : {
+                  message: 'Logged to learnings.md. Ask the user to commit this so the knowledge '
+                    + 'survives to other machines and sessions.',
+                }),
+              path,
             }, null, 2),
           }],
         };
       } catch (e) {
-        return errorResponse('WRITE_FAILED', e.message, 'Check file permissions on learnings.md.');
+        return errorResponse(
+          'WRITE_FAILED',
+          e.message,
+          `Check file permissions on ${scope === 'private' ? PRIVATE_PATH : PUBLIC_PATH}.`,
+        );
       }
     }
   );
 }
 
 function errorResponse(code, message, suggestion) {
-  return { content: [{ type: 'text', text: JSON.stringify({ error: true, code, message, suggestion }) }] };
+  return { content: [{ type: 'text', text: JSON.stringify({ error: true, code, message, suggestion }, null, 2) }] };
 }

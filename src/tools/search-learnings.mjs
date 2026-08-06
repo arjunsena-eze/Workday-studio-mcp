@@ -1,11 +1,5 @@
 import { z } from 'zod';
-import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const LEARNINGS_PATH = join(__dirname, '../../learnings.md');
+import { readStores } from '../learnings-store.mjs';
 
 // ─── Public tool registration ─────────────────────────────────────────────────
 
@@ -34,6 +28,10 @@ export function register(server) {
       '  get_patterns            → curated cross-element rules',
       '  search_learnings        → raw field findings, newest first, may correct the other two',
       '',
+      'Searches BOTH stores: learnings.md (committed) and learnings.local.md (gitignored,',
+      'client-specific). Local results are labelled [LOCAL] — do not copy their contents into',
+      'anything that gets committed or shared without stripping identifiers first.',
+      '',
       'USAGE:',
       '  • No arguments        → index of every entry (date, category, title).',
       '  • search="END_DOCUMENT" → full text of every entry mentioning the term.',
@@ -49,19 +47,21 @@ export function register(server) {
         .describe('Max entries to return (default 6). Full entries are long — raise deliberately.'),
     },
     async ({ search, category, limit } = {}) => {
-      if (!existsSync(LEARNINGS_PATH)) {
+      const stores = readStores();
+      if (!stores.length) {
         return errorResponse(
           'LEARNINGS_NOT_FOUND',
-          `learnings.md not found at ${LEARNINGS_PATH}`,
+          'Neither learnings.md nor learnings.local.md was found.',
           'The intake log ships with the repo. Ensure the studio-mcp clone is intact.',
         );
       }
 
-      const md = await readFile(LEARNINGS_PATH, 'utf8');
-      const entries = parseEntries(md);
+      // Tag every entry with its origin so private findings are visibly private.
+      const entries = stores.flatMap(({ scope, text }) =>
+        parseEntries(text).map((e) => ({ ...e, scope })));
 
       if (!entries.length) {
-        return successText('learnings.md contains no entries yet.');
+        return successText('No learnings recorded yet.');
       }
 
       let hits = entries;
@@ -129,12 +129,20 @@ export function parseEntries(md) {
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
+const isLocal = (e) => e.scope === 'private';
+const tag = (e) => (isLocal(e) ? '[LOCAL] ' : '');
+
 export function renderIndex(entries) {
+  const localCount = entries.filter(isLocal).length;
   const out = [
     `# Studio learnings — index (${entries.length} entries)`,
     '',
     'Raw field findings, not yet promoted into the curated knowledge base.',
     'Call `search_learnings` again with `search="<error text>"` for full entries.',
+    ...(localCount
+      ? ['', `${localCount} marked [LOCAL] come from learnings.local.md (gitignored). Their contents `
+        + 'may name a specific client — strip identifiers before reusing them anywhere shared.']
+      : []),
     '',
   ];
 
@@ -147,7 +155,7 @@ export function renderIndex(entries) {
   for (const [cat, list] of [...byCategory.entries()].sort()) {
     out.push(`## ${cat} (${list.length})`);
     for (const e of list.slice().sort((a, b) => b.date.localeCompare(a.date))) {
-      out.push(`  - [${e.date}] ${e.title}${e.corrects ? '  ⚠ CORRECTS ' + e.corrects : ''}`);
+      out.push(`  - ${tag(e)}[${e.date}] ${e.title}${e.corrects ? '  ⚠ CORRECTS ' + e.corrects : ''}`);
     }
     out.push('');
   }
@@ -175,7 +183,15 @@ export function renderHits(hits, { search, category, limit }) {
       + 'Where they disagree with get_step_type_reference or get_patterns, the learning is newer — trust it.\n'
     : '';
 
-  return header + banner + '\n' + shown.map((e) => e.body).join('\n\n---\n\n');
+  const locals = shown.filter(isLocal);
+  const localBanner = locals.length
+    ? '\n🔒 ' + locals.length + ' result(s) are [LOCAL] — from gitignored learnings.local.md. They may '
+      + 'name a specific client. Use them to solve the problem; strip identifiers before putting any '
+      + 'of that wording into a commit, a public entry, or a message to anyone else.\n'
+    : '';
+
+  return header + banner + localBanner + '\n'
+    + shown.map((e) => (isLocal(e) ? `[LOCAL]\n${e.body}` : e.body)).join('\n\n---\n\n');
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────

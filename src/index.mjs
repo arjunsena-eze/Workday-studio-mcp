@@ -28,6 +28,7 @@ import { register as registerValidateAssembly } from './tools/validate-assembly.
 import { register as registerParseServerLog } from './tools/parse-server-log.mjs';
 import { register as registerLogLearning } from './tools/log-learning.mjs';
 import { register as registerSearchLearnings } from './tools/search-learnings.mjs';
+import { register as registerWorkspaces } from './tools/workspaces.mjs';
 import { register as registerRenameSteps } from './tools/rename-steps.mjs';
 import { register as registerDeleteAssemblyStep } from './tools/delete-assembly-step.mjs';
 import { register as registerGetPatterns } from './tools/get-patterns.mjs';
@@ -82,6 +83,7 @@ registerParseServerLog(server);
 // Knowledge capture — Claude calls this automatically when it discovers something new
 registerLogLearning(server);
 registerSearchLearnings(server);
+registerWorkspaces(server);
 
 // ----------------------------------------------------------------------------
 // Optional local extensions (gitignored, never part of the public distribution).
@@ -111,4 +113,10 @@ await server.connect(transport);
 const extSuffix = localExtensionCount > 0
   ? ` (+${localExtensionCount} local extension${localExtensionCount === 1 ? '' : 's'})`
   : '';
-process.stderr.write(`[studio-mcp] Server started. Workspace: ${config.workspacePath}${extSuffix}\n`);
+// Name the active profile at startup: with several client workspaces configured,
+// knowing WHICH one is live is the difference between a fix and a wrong-project edit.
+const profileCount = Object.keys(config.workspaces).length;
+const wsLabel = profileCount > 1
+  ? `[${config.activeWorkspace}] ${config.workspacePath} (${profileCount} profiles — list_workspaces to switch)`
+  : config.workspacePath;
+process.stderr.write(`[studio-mcp] Server started. Workspace: ${wsLabel}${extSuffix}\n`);
