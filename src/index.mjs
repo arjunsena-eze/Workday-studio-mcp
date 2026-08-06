@@ -27,6 +27,7 @@ import { register as registerUpdateSubFlow } from './tools/update-sub-flow.mjs';
 import { register as registerValidateAssembly } from './tools/validate-assembly.mjs';
 import { register as registerParseServerLog } from './tools/parse-server-log.mjs';
 import { register as registerLogLearning } from './tools/log-learning.mjs';
+import { register as registerSearchLearnings } from './tools/search-learnings.mjs';
 import { register as registerRenameSteps } from './tools/rename-steps.mjs';
 import { register as registerDeleteAssemblyStep } from './tools/delete-assembly-step.mjs';
 import { register as registerGetPatterns } from './tools/get-patterns.mjs';
@@ -80,6 +81,7 @@ registerParseServerLog(server);
 
 // Knowledge capture — Claude calls this automatically when it discovers something new
 registerLogLearning(server);
+registerSearchLearnings(server);
 
 // ----------------------------------------------------------------------------
 // Optional local extensions (gitignored, never part of the public distribution).

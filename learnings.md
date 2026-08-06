@@ -1232,3 +1232,174 @@ Full expected project layout:
 ```
 **Promote to**: patterns.md
 **Status**: raw
+
+### [2026-08-06] MVELTemplateType content is brace-balance checked; MVELExpressionType is not
+**Category**: MVEL
+**Trigger**: Studio rejected an assembly with: String containing MVEL expression '@{props['x']}], "count": @{props['n']}}' is invalid. Closing and opening tags {...} do not match. The string was valid JSON and every @{...} was well formed.
+**Pattern**: Studio counts { and } characters in any value the schema types tns:MVELTemplateType and rejects the assembly if the totals differ. This covers cc:text, cc:header-text, cc:footer-text, cc:separator and roughly 130 attributes including message, message-details, title, extra-path, endpoint, value, variable-name, expiresIn, filename and subject. Literal JSON braces are therefore fine ONLY when they balance inside that single value — a cc:write whose cc:text opens and closes the same JSON object passes. The failure mode is building a JSON envelope across two elements, e.g. the opening brace in a cc:aggregator's cc:header-text and the closing brace in a later cc:write: neither value balances on its own and both are rejected, even though the concatenated runtime output is valid JSON. The escape hatch is cc:expression, which the schema types tns:MVELExpressionType and which is NOT brace-checked. Build the whole string there with MVEL concatenation and have the template emit a single balanced token. Note this is a static text check, not a parse: it fires at design time and knows nothing about what the props evaluate to. Worth scripting as a pre-deploy check — walk every MVELTemplateType-typed element and attribute and compare brace counts; it takes seconds and catches the error before Studio does.
+**Example**:
+```xml
+&lt;!-- REJECTED — 4 opens, 5 closes; the extra } has no partner in this value --&gt;
+&lt;cc:text&gt;@{props['rows']}], "total": @{props['n']}}&lt;/cc:text&gt;
+
+&lt;!-- REJECTED — lone { that can never balance here --&gt;
+&lt;cc:header-text&gt;{"results": [&lt;/cc:header-text&gt;
+
+&lt;!-- ACCEPTED — literal braces balanced within the one value --&gt;
+&lt;cc:text&gt;{ "id": "@{props['id']}" }&lt;/cc:text&gt;
+
+&lt;!-- ACCEPTED — envelope built in cc:expression (not brace-checked),
+     template emits one balanced token --&gt;
+&lt;cc:eval id="BuildResponse"&gt;
+  &lt;cc:expression&gt;props['out'] = '{"results": [' + props['rows'] + '], "total": ' + props['n'] + '}'&lt;/cc:expression&gt;
+&lt;/cc:eval&gt;
+&lt;cc:write id="Emit" output-mimetype="application/json"&gt;
+  &lt;cc:message&gt;&lt;cc:text&gt;@{props['out']}&lt;/cc:text&gt;&lt;/cc:message&gt;
+&lt;/cc:write&gt;
+```
+**Promote to**: all
+**Status**: raw
+
+### [2026-08-06] Listener service payloads arrive as event documents, not in wd.retrieve.variable at StartHere
+**Category**: Assembly
+**Trigger**: A cloud:listener-service integration read the posted body with vars.isVariable('wd.retrieve.variable') ? vars['wd.retrieve.variable'].getText() : parts[0].getText() and failed with: Trying to write END_DOCUMENT when document has no root (ie. trying to output empty document). Logging the message body at StartHere showed it was not the posted payload at all but Workday's own Get_Integration_Systems_Response SOAP envelope.
+**Corrects**: get_step_type_reference workday-in — claims "cloud:listener-service: ... The inbound payload arrives in the wd.retrieve.variable at runtime." True only AFTER a vm://wcc/GetEventDocuments call; false at StartHere.
+**Pattern**: CORRECTION to the workday-in step-type reference, which states that for cloud:listener-service the inbound payload arrives in wd.retrieve.variable at runtime. It does not — not at StartHere. Two things are true at the entry point: wd.retrieve.variable does not yet exist, and the message body holds framework state (a Get_Integration_Systems_Response envelope), not the posted body. The posted payload is stored as an event DOCUMENT. wd.retrieve.variable is the OUTPUT of the retrieval call, not an input. Retrieve it with the same three-step chain used for inbound-file integrations: (1) cc:local-out to vm://wcc/GetEventDocuments setting ie.event.wid, (2) a cc:route whose strategy is cc:doc-iterator — this populates wd.retrieve.variable once per document, and (3) cc:copy input="variable" input-variable="wd.retrieve.variable" as the first step of the processing mediation to load the document into the message body. Use a bare cc:doc-iterator with no labels attribute so every document is iterated; labels is optional and guessing a label silently yields zero iterations. A cloud:retrieval-service declaration is NOT required — GetEventDocuments works from a bare cc:integration-system, confirmed in a working build. Two traps make this expensive to diagnose. First, vars.isVariable() tests EXISTENCE, not content, so a ternary that prefers the variable takes the empty branch whenever the variable exists but is blank and the fallback never fires. Second, feeding empty or non-JSON content to cc:json-to-xml surfaces as the generic END_DOCUMENT error, which names nothing about payloads or listeners. Log the message body at the top of the flow before assuming where data lives.
+**Example**:
+```xml
+&lt;!-- WRONG — neither source holds the posted body at StartHere --&gt;
+&lt;cc:workday-in id="StartHere" routes-to="Parse"&gt;...&lt;/cc:workday-in&gt;
+&lt;cc:async-mediation id="Parse"&gt;&lt;cc:steps&gt;
+  &lt;cc:eval&gt;&lt;cc:expression&gt;props['p'] = vars['wd.retrieve.variable'].getText()&lt;/cc:expression&gt;&lt;/cc:eval&gt;
+&lt;/cc:steps&gt;&lt;/cc:async-mediation&gt;
+
+&lt;!-- CORRECT — fetch documents, iterate, copy into the body --&gt;
+&lt;cc:workday-in id="StartHere" routes-to="GetEventDocuments"&gt;
+  &lt;cc:integration-system name="INT999"&gt;
+    &lt;cloud:listener-service name="INT999_Listener"/&gt;
+  &lt;/cc:integration-system&gt;
+&lt;/cc:workday-in&gt;
+&lt;cc:local-out id="GetEventDocuments" routes-response-to="IterateDocs" endpoint="vm://wcc/GetEventDocuments"&gt;
+  &lt;cc:set name="ie.event.wid" value="lp.isSet() ? lp.getIntegrationEventWID() : null"/&gt;
+&lt;/cc:local-out&gt;
+&lt;cc:route id="IterateDocs"&gt;
+  &lt;cc:doc-iterator/&gt;
+  &lt;cc:sub-route name="EachDocument" routes-to="Parse"/&gt;
+&lt;/cc:route&gt;
+&lt;cc:async-mediation id="Parse" routes-to="Split"&gt;&lt;cc:steps&gt;
+  &lt;cc:copy id="LoadDoc" input="variable" input-variable="wd.retrieve.variable"/&gt;
+&lt;/cc:steps&gt;&lt;/cc:async-mediation&gt;
+```
+**Promote to**: all
+**Status**: raw
+
+### [2026-08-06] cc:json-to-xml nests twice for an array of objects — nested-array-name AND nested-object-name
+**Category**: Assembly
+**Trigger**: A top-level JSON array was converted with nested-array-name="asset" root-element-name="root" and split on /root/asset. The splitter produced the right record count, but every field xpath returned empty string, so the outbound request body posted with all values blank and the API rejected it.
+**Pattern**: For a JSON array whose elements are objects, cc:json-to-xml applies TWO wrappers, not one. nested-array-name (default "entry") names each array element, and then nested-object-name (default "data") wraps that element's object. So a top-level array of objects converted with nested-array-name="asset" and root-element-name="root" yields root/asset/data/field, not root/asset/field. The splitter xpath and the field xpaths therefore sit at different depths: split on /root/asset but read fields at asset/data/field. This is nastier than a normal xpath bug because parts[0].xpath() on a non-matching path returns EMPTY STRING rather than throwing, so the flow proceeds and posts a well-formed request full of blank values. The API error you eventually see describes the blank data, not the xpath. Always log the converted XML immediately after cc:json-to-xml and read the actual element depth before writing field xpaths — one log line costs nothing and the alternative is a deploy cycle spent misreading a downstream error. Defaults confirmed in JsonToXmlStepType: root-element-name="root", nested-array-name="entry", nested-object-name="data".
+**Example**:
+```xml
+&lt;!-- Input: [ { "serialNumber": "123", "worker": { "id": "abc" } } ] --&gt;
+&lt;cc:json-to-xml id="ToXml" nested-array-name="asset" root-element-name="root"/&gt;
+
+&lt;!-- Actual output — note the extra &lt;data&gt; level --&gt;
+&lt;root&gt;
+  &lt;asset&gt;
+    &lt;data&gt;
+      &lt;serialNumber&gt;123&lt;/serialNumber&gt;
+      &lt;worker&gt;&lt;id&gt;abc&lt;/id&gt;&lt;/worker&gt;
+    &lt;/data&gt;
+  &lt;/asset&gt;
+&lt;/root&gt;
+
+&lt;!-- Splitter is at asset level --&gt;
+&lt;cc:xpath-splitter xpath="/root/asset"/&gt;
+
+&lt;!-- Fields are one level deeper. Wrong paths return "" silently. --&gt;
+&lt;cc:expression&gt;props['serial'] = parts[0].xpath('asset/data/serialNumber')&lt;/cc:expression&gt;
+&lt;cc:expression&gt;props['worker'] = parts[0].xpath('asset/data/worker/id')&lt;/cc:expression&gt;
+```
+**Promote to**: all
+**Status**: raw
+
+### [2026-08-06] cc:workday-out-rest defaults to GET — method="POST" is mandatory for custom object writes
+**Category**: HTTP
+**Trigger**: A custom object write built the JSON body in a preceding cc:write and posted via cc:workday-out-rest with extra-path set but no method attribute. The server log showed: REST Method Type not set, defaulting to GET. followed by 404 Not Found and {"error":"not found: id","code":"S21","severity":"Critical"}.
+**Pattern**: cc:workday-out-rest does NOT infer the HTTP verb from the presence of a request body. With method omitted it issues a GET and the body is discarded. Against a custom object COLLECTION endpoint a GET carries no instance id, so the API answers 404 with code S21 "not found: id" — an error that reads like a bad WID or an unbound alias and sends you auditing tenant configuration that is in fact correct. Always set method explicitly on any write. The attribute is typed tns:MVELHttpMethodType, a union of the literals GET, POST, PUT, DELETE, PATCH with MVELTemplateType, so it accepts either a literal or an @{...} expression. Note that the method attribute is optional in the schema, so no validator flags its absence — the only signal is the "REST Method Type not set, defaulting to GET" line in the server log. Worth grepping for after any run where a write mysteriously 404s.
+**Example**:
+```xml
+&lt;!-- WRONG — silently a GET; body discarded, 404 "not found: id" --&gt;
+&lt;cc:workday-out-rest id="PostRecord" routes-response-to="OnSuccess"
+  extra-path="@{intsys.customObjectService.getExtrapath('alias')}?updateIfExists=true"/&gt;
+
+&lt;!-- CORRECT --&gt;
+&lt;cc:workday-out-rest id="PostRecord" method="POST" routes-response-to="OnSuccess"
+  extra-path="@{intsys.customObjectService.getExtrapath('alias')}?updateIfExists=true"/&gt;
+```
+**Promote to**: all
+**Status**: raw
+
+### [2026-08-06] "Unable to retrieve OAuth bearer token" is a wrapper, not the cause — read the nested HTTP status
+**Category**: Error
+**Trigger**: A cc:workday-out-rest call failed with java.io.IOException: Unable to retrieve OAuth bearer token, which reads as an authentication or credential failure. The nested cause in the same log line was a plain HTTP 404 from the target endpoint, and authentication was working correctly throughout.
+**Pattern**: WorkdayOutRestTransport wraps non-2xx responses from the target endpoint in java.io.IOException: Unable to retrieve OAuth bearer token. The wrapper text is misleading: it names OAuth regardless of what actually went wrong, so a 404 from a wrong URL, a wrong HTTP verb or a wrong path all surface as an apparent credential problem. Never start debugging credentials, API clients or refresh tokens on the strength of that message alone. Read the "Caused by" clause on the same line — the real signal is the BadRequestException with the HTTP status, the resolved URL, and the response body. Note that cc:workday-out-rest uses Workday's own injected credentials, so an authentic OAuth failure there is rare; a wrong URL or verb is far more likely. Applies equally to the paired WARN lines from HttpRetryControl, which repeat the same wrapper.
+**Example**:
+```xml
+Log line — the wrapper is first, the actual cause is nested:
+
+  Details: [java.io.IOException: Unable to retrieve OAuth bearer token]
+  Caused by: [BadRequestException :
+  Error code : notfound
+  Response :{"error":"not found: id","code":"S21","severity":"Critical"}
+  ...BadRequestException: error from returned HTTP status: 404 Not Found
+     URL=http://&lt;HOST&gt;/ccx/api/v1/&lt;TENANT&gt;/customObjects/alias?updateIfExists=true]
+
+Diagnose from "404 Not Found" and the URL, not from "Unable to retrieve OAuth bearer token".
+```
+**Promote to**: patterns.md
+**Status**: raw
+
+### [2026-08-06] Studio's open editor silently overwrites external edits to assembly.xml on save
+**Category**: Other
+**Trigger**: A schema fix applied to assembly.xml on disk was verified clean, then the same error reappeared after the next deploy. The file on disk had reverted: the fix was gone, CDATA sections had become &amp;quot; entities and tab indentation had become spaces in the blocks Studio owns.
+**Pattern**: Eclipse does not re-read a file from disk while an editor is open on it. If assembly.xml or assembly-diagram.xml is open in Studio and anything else edits it — a script, an MCP tool, another editor — Studio still holds its own in-memory model, and the next save or deploy serializes that stale model straight over the external change. The edit is not rejected or merged, it is silently lost, and the error you already fixed comes back. Tell-tale signs that a Studio round-trip has happened: &lt;![CDATA[...]]&gt; blocks rewritten as &amp;quot; entities, tab indentation replaced with spaces in Studio-owned regions, and a visualProperties block with no x/y appearing for a top-level cc:send-error. Changes made THROUGH Studio survive because they go via that same model. Sequence for any external edit: close the editor tab choosing Don't Save if prompted, refresh the project (F5), make the edit, then reopen. After the edit, confirm the change is present in the reopened editor before deploying. This costs a full deploy cycle every time it is missed and the symptom — "the fix stopped working" — points at the fix rather than at the editor.
+**Example**:
+```xml
+Symptoms of a Studio round-trip having overwritten an external edit:
+
+  before (written externally)      after (Studio re-serialized)
+  ---------------------------      ----------------------------
+  &lt;![CDATA[a != '']]&gt;              a != &amp;quot;&amp;quot;
+  \t\t&lt;cc:steps&gt;                    (spaces)&lt;cc:steps&gt;
+  (absent)                         &lt;visualProperties&gt;
+                                     &lt;element href="assembly.xml#//@beans/@mixed.1/@mixed.N"/&gt;
+                                   &lt;/visualProperties&gt;
+
+Safe sequence: close editor (Don't Save) -&gt; F5 -&gt; edit externally -&gt; reopen -&gt; verify -&gt; deploy
+```
+**Promote to**: patterns.md
+**Status**: raw
+
+### [2026-08-06] Validate assemblies against the real XSDs in the Studio install, not a hand-rolled linter
+**Category**: Schema
+**Trigger**: An assembly that passed the repo's own validate_assembly with 0 errors and 0 warnings was rejected by Studio with 7 schema errors on open. The rule-based validator has no model of the XSD sequence order or of MVEL template brace balance, so neither class of error was detectable.
+**Pattern**: Studio ships the authoritative schemas inside the install at plugins/com.workday.sh.common.ui_&lt;version&gt;/schemas/assembly/ — assembly.xsd, assembly-core.xsd, cloud.xsd, integration-system.xsd, job.xsd. Validating against those catches whole classes of error that a rule-based linter cannot, notably xsd:sequence ordering violations and unknown or misspelled attributes, and it answers questions like "what values does this attribute accept" definitively instead of by inference. Two practical notes. First, the assembly.xml root is a Spring &lt;beans&gt; element with no schema, so a validator pointed at the whole document performs lax validation, skips the children and reports zero errors — extract the cc:assembly subtree and validate THAT as a standalone document, since cc:assembly is a global element in assembly-core.xsd. Second, when loading the schema set, pass each file's real targetNamespace; passing null fails with a targetNamespace mismatch. Always control-test a new validator against a known-bad input before trusting a clean result — a validator that silently validates nothing also reports zero errors. Pair the XSD pass with a brace-balance sweep over every MVELTemplateType-typed value; between them they catch most of what Studio rejects on open, before a deploy is spent finding out. Note these XSDs also use the XMLSchema namespace as the default namespace, so declarations read &lt;element name="..."&gt; rather than &lt;xsd:element ...&gt; — grep accordingly.
+**Example**:
+```xml
+Schema location inside the Studio install:
+  &lt;STUDIO&gt;/WD/studio/plugins/com.workday.sh.common.ui_&lt;version&gt;/schemas/assembly/
+
+Validate the cc:assembly SUBTREE, not the &lt;beans&gt; document:
+  - &lt;beans&gt; is Spring-namespaced and unschema'd -&gt; lax validation -&gt; 0 errors, nothing checked
+  - cc:assembly IS a global element in assembly-core.xsd -&gt; validates properly
+
+Load the schema set with real namespaces:
+  assembly.xsd, assembly-core.xsd -&gt; http://www.capeclear.com/assembly/10
+  cloud.xsd, integration-system.xsd, job.xsd -&gt; urn:com.workday/esb/cloud/10.0
+
+Control test before trusting a clean result: feed it a known-bad file
+(e.g. cc:integration-system children in the wrong sequence order) and
+confirm it reports exactly that error.
+```
+**Promote to**: validate-assembly.mjs
+**Status**: raw
