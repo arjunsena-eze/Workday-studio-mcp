@@ -36,6 +36,7 @@ export function register(server) {
                 '.settings/org.eclipse.jdt.core.prefs',
                 '.settings/org.eclipse.wst.common.component',
                 '.settings/org.eclipse.wst.common.project.facet.core.xml',
+                'ws/META-INF/MANIFEST.MF',
                 'ws/WSAR-INF/assembly.xml',
                 'ws/WSAR-INF/assembly-diagram.xml',
               ],
@@ -55,6 +56,7 @@ async function createProjectScaffold(projectPath, projectName) {
   await mkdir(join(projectPath, 'build', 'classes'), { recursive: true });
   await mkdir(join(projectPath, 'src', 'main', 'java'), { recursive: true });
   await mkdir(join(projectPath, 'ws', 'WSAR-INF'), { recursive: true });
+  await mkdir(join(projectPath, 'ws', 'META-INF'), { recursive: true });
 
   await writeFile(join(projectPath, '.project'), dotProject(projectName));
   await writeFile(join(projectPath, '.classpath'), CLASSPATH);
@@ -64,11 +66,19 @@ async function createProjectScaffold(projectPath, projectName) {
   await writeFile(join(projectPath, '.settings', 'org.eclipse.jdt.core.prefs'), JDT_CORE_PREFS);
   await writeFile(join(projectPath, '.settings', 'org.eclipse.wst.common.component'), wstCommonComponent(projectName));
   await writeFile(join(projectPath, '.settings', 'org.eclipse.wst.common.project.facet.core.xml'), FACET_CORE);
+  await writeFile(join(projectPath, 'ws', 'META-INF', 'MANIFEST.MF'), MANIFEST_MF);
   await writeFile(join(projectPath, 'ws', 'WSAR-INF', 'assembly.xml'), assemblyXml(projectName));
   await writeFile(join(projectPath, 'ws', 'WSAR-INF', 'assembly-diagram.xml'), ASSEMBLY_DIAGRAM);
 }
 
 // --- templates ---
+
+// Every hand-built Studio project carries this. Studio's WSAR packaging expects
+// ws/META-INF/MANIFEST.MF to exist; a project scaffolded without it diverges from
+// what Studio itself produces. CRLF line endings and the trailing space after
+// "Class-Path:" match the file Studio writes — the JAR manifest format is
+// whitespace-sensitive, so do not "tidy" this string.
+const MANIFEST_MF = 'Manifest-Version: 1.0\r\nClass-Path: \r\n\r\n';
 
 function dotProject(name) {
   return `<?xml version="1.0" encoding="UTF-8"?>

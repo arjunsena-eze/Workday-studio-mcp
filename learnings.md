@@ -1189,3 +1189,46 @@ Per-message safe date construction from ISO string (no FQCN): props['EpStartDate
 **Promote to**: all
 **Status**: promoted (patterns.md MVEL section + eval step reference + validator rule JAVA_TIME_IN_PER_MESSAGE_EVAL)
 **Promoted**: 2026-07-13
+
+### [2026-08-06] cc:integration-system children are an xsd:sequence — order is mandatory
+**Category**: Schema
+**Trigger**: Opening a freshly scaffolded project in Studio produced: cvc-complex-type.2.4.a: Invalid content was found starting with element '{"urn:com.workday/esb/cloud/10.0":attribute-map-service}'. One of '{...retrieval-service, ...report-service, ...listener-service, ...}' is expected. The elements were all individually legal — only their order was wrong.
+**Pattern**: The children of cc:integration-system are declared as an xsd:sequence in Studio's integration-system.xsd, so their order is MANDATORY, not stylistic. The required order is: param, attribute-map-service, sequence-generator-service, transaction-log-service, delivery-service, retrieval-service, report-service, listener-service, custom-object-service, service-reference, data-initialization-service. Any other order fails schema validation on Studio open. The error message is misleading: it names the element it rejected and lists only the elements still legal at that position, which makes it look like the named element is unsupported when in fact it merely came too late. Read the "One of {...}" list as "everything from here onward in the sequence" — if the rejected element is absent from that list, it belongs EARLIER, not later. Two consequences worth remembering: cloud:param must precede every service element, and attribute-map-service must precede retrieval-service, report-service and listener-service. Verified against integration-system.xsd in the Studio install (plugins/com.workday.sh.common.ui_&lt;version&gt;/schemas/assembly/) and confirmed by schema-validating generated assemblies with javax.xml.validation against Studio's own assembly.xsd — four scaffold combinations failed before reordering and all four passed after.</pattern>
+<parameter name="example">&lt;!-- INVALID — attribute-map-service after retrieval-service --&gt;
+&lt;cc:integration-system name="INT999"&gt;
+  &lt;cloud:retrieval-service name="INT999_Retrieval"/&gt;
+  &lt;cloud:attribute-map-service name="INT999_Attributes"&gt;...&lt;/cloud:attribute-map-service&gt;
+&lt;/cc:integration-system&gt;
+
+&lt;!-- VALID — schema sequence order --&gt;
+&lt;cc:integration-system name="INT999"&gt;
+  &lt;cloud:param name="Effective Date"&gt;...&lt;/cloud:param&gt;
+  &lt;cloud:attribute-map-service name="INT999_Attributes"&gt;...&lt;/cloud:attribute-map-service&gt;
+  &lt;cloud:retrieval-service name="INT999_Retrieval"/&gt;
+  &lt;cloud:report-service name="INT999_Reports"&gt;...&lt;/cloud:report-service&gt;
+  &lt;cloud:listener-service name="INT999_Listener"/&gt;
+&lt;/cc:integration-system&gt;
+**Promote to**: all
+**Status**: raw
+
+### [2026-08-06] Studio projects need ws/META-INF/MANIFEST.MF
+**Category**: Assembly
+**Trigger**: A scaffolded project was compared file-by-file against hand-built projects in the same workspace. Every project created through Studio itself had ws/META-INF/MANIFEST.MF; the scaffolded one did not.
+**Pattern**: A Workday Studio project carries a JAR-style manifest at ws/META-INF/MANIFEST.MF alongside ws/WSAR-INF/. Studio creates it automatically; any tool that scaffolds a project directory by hand must create it too, or the project diverges from what Studio produces and the WSAR packaging step has no manifest to build from. The content is minimal but format-sensitive: the JAR manifest spec requires CRLF line endings, a trailing space after "Class-Path:", and a blank line at the end. Do not normalise it to LF or strip the trailing whitespace. Checked across multiple hand-built projects in one workspace — the file was byte-identical in all of them.
+**Example**:
+```xml
+ws/META-INF/MANIFEST.MF  (CRLF line endings, note the space after Class-Path:)
+
+Manifest-Version: 1.0
+Class-Path: 
+
+Full expected project layout:
+  .project  .classpath  .settings/
+  src/main/java/
+  build/classes/
+  ws/META-INF/MANIFEST.MF
+  ws/WSAR-INF/assembly.xml
+  ws/WSAR-INF/assembly-diagram.xml
+```
+**Promote to**: patterns.md
+**Status**: raw

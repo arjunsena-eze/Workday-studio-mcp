@@ -193,10 +193,45 @@ export function register(server) {
 
 // ─── workday-in declaration generation ───────────────────────────────────────
 
+// The children of cc:integration-system are an xsd:sequence in Studio's
+// integration-system.xsd — the order below is MANDATORY, not stylistic:
+//
+//   param → attribute-map-service → sequence-generator-service →
+//   transaction-log-service → delivery-service → retrieval-service →
+//   report-service → listener-service → custom-object-service →
+//   service-reference → data-initialization-service
+//
+// Emitting them in any other order fails Studio's schema validation on open
+// with `cvc-complex-type.2.4.a`. Do not reorder these blocks for readability.
 function buildWorkdayInDeclarations(projectName, designBrief) {
   const parts = [];
 
-  // 1. RAAS report service
+  // 1. Launch params (from RAAS filter params when trigger is manual)
+  if (designBrief.trigger === 'launch-params-manual') {
+    const paramStubs = buildLaunchParamStubs(designBrief.raas_reports ?? []);
+    parts.push(...paramStubs);
+  }
+
+  // 2. Integration attributes (credentials + config)
+  const attrs = resolveAttributes(designBrief);
+  if (attrs.length > 0) {
+    parts.push(`\t\t\t<cloud:attribute-map-service name="${projectName}_Attributes">`);
+    for (const attr of attrs) {
+      parts.push(`\t\t\t\t<cloud:attribute name="${attr.name}">`);
+      parts.push(`\t\t\t\t\t<cloud:type><cloud:simple-type>text</cloud:simple-type></cloud:type>`);
+      if (attr.is_password) parts.push(`\t\t\t\t\t<cloud:display-option>display-as-password</cloud:display-option>`);
+      if (attr.required)    parts.push(`\t\t\t\t\t<cloud:display-option>required-for-launch</cloud:display-option>`);
+      parts.push(`\t\t\t\t</cloud:attribute>`);
+    }
+    parts.push(`\t\t\t</cloud:attribute-map-service>`);
+  }
+
+  // 3. Retrieval service for inbound file integrations
+  if (designBrief.data_source === 'inbound-file') {
+    parts.push(`\t\t\t<cloud:retrieval-service name="${projectName}_Retrieval"/>`);
+  }
+
+  // 4. RAAS report service
   if (designBrief.data_source === 'raas' || designBrief.data_source === 'multiple') {
     const reports = designBrief.raas_reports ?? [];
     parts.push(`\t\t\t<cloud:report-service name="${projectName}_Reports">`);
@@ -216,34 +251,9 @@ function buildWorkdayInDeclarations(projectName, designBrief) {
     parts.push(`\t\t\t</cloud:report-service>`);
   }
 
-  // 2. Retrieval service for inbound file integrations
-  if (designBrief.data_source === 'inbound-file') {
-    parts.push(`\t\t\t<cloud:retrieval-service name="${projectName}_Retrieval"/>`);
-  }
-
-  // 3. Listener service for webhook/event-driven integrations
+  // 5. Listener service for webhook/event-driven integrations
   if (designBrief.data_source === 'webhook') {
     parts.push(`\t\t\t<cloud:listener-service name="${projectName}_Listener"/>`);
-  }
-
-  // 4. Integration attributes (credentials + config)
-  const attrs = resolveAttributes(designBrief);
-  if (attrs.length > 0) {
-    parts.push(`\t\t\t<cloud:attribute-map-service name="${projectName}_Attributes">`);
-    for (const attr of attrs) {
-      parts.push(`\t\t\t\t<cloud:attribute name="${attr.name}">`);
-      parts.push(`\t\t\t\t\t<cloud:type><cloud:simple-type>text</cloud:simple-type></cloud:type>`);
-      if (attr.is_password) parts.push(`\t\t\t\t\t<cloud:display-option>display-as-password</cloud:display-option>`);
-      if (attr.required)    parts.push(`\t\t\t\t\t<cloud:display-option>required-for-launch</cloud:display-option>`);
-      parts.push(`\t\t\t\t</cloud:attribute>`);
-    }
-    parts.push(`\t\t\t</cloud:attribute-map-service>`);
-  }
-
-  // 5. Launch params (from RAAS filter params when trigger is manual)
-  if (designBrief.trigger === 'launch-params-manual') {
-    const paramStubs = buildLaunchParamStubs(designBrief.raas_reports ?? []);
-    parts.push(...paramStubs);
   }
 
   return parts.join('\n');
