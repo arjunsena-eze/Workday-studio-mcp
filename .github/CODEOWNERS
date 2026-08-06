@@ -1,3 +1,11 @@
-# All files require review from @krishnagutta before merging.
-# This covers PRs from teammates adding learnings, tools, or patterns.
-* @krishnagutta
+# Code owner for this repository.
+#
+# This is a private, standalone copy — it is no longer a GitHub fork of
+# krishnagutta/Workday-studio-mcp (making a fork private detaches the fork
+# relationship). The previous entry named @krishnagutta, who has no access
+# here, so every PR raised a review request that could never be answered.
+#
+# Advisory only: CODEOWNERS is enforced via branch protection, which is not
+# available on private repositories on the free plan. This documents ownership
+# and auto-requests review; it does not block a merge.
+* @arjunsena-eze
