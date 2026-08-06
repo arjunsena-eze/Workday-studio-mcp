@@ -23,6 +23,8 @@ Everything runs **locally** on your machine — no network calls, no tenant cred
 
 A growing knowledge base lives at [`docs/studio-integration-patterns.md`](docs/studio-integration-patterns.md) — hard-won lessons captured from real Studio debugging sessions.
 
+**New to MCP?** Start with [`docs/getting-started.md`](docs/getting-started.md) — a 15-minute setup walkthrough written for Studio developers who have never used an MCP server, covering any AI client (not just Claude).
+
 For a single-page digest of the tools, the `plan_integration` design brief, validator rule codes, the SOAP catalog, and the highest-value patterns, see [`docs/quick-reference.md`](docs/quick-reference.md).
 
 ---
