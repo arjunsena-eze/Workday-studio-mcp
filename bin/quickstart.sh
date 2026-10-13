@@ -2,7 +2,7 @@
 # Workday Studio MCP — one-shot installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/krishnagutta/Workday-studio-mcp/main/bin/quickstart.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/arjunsena-eze/Workday-studio-mcp/main/bin/quickstart.sh | bash
 #
 # What it does:
 #   1. Checks prereqs (node 18+, git)
@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/krishnagutta/Workday-studio-mcp.git"
+REPO_URL="https://github.com/arjunsena-eze/Workday-studio-mcp.git"
 INSTALL_DIR="${STUDIO_MCP_INSTALL_DIR:-$HOME/Workday-studio-mcp}"
 
 GREEN='\033[0;32m'

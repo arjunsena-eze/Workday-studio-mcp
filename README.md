@@ -96,7 +96,7 @@ For a single-page digest of the tools, the `plan_integration` design brief, vali
 One line:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/krishnagutta/Workday-studio-mcp/main/bin/quickstart.sh | bash
+curl -fsSL https://raw.githubusercontent.com/arjunsena-eze/Workday-studio-mcp/main/bin/quickstart.sh | bash
 ```
 
 This clones the repo to `~/Workday-studio-mcp`, installs dependencies, and prints the exact `claude mcp add` command for your machine.
@@ -118,7 +118,7 @@ Or do it manually — see **Manual setup** below.
 **1. Clone and install**
 
 ```bash
-git clone https://github.com/krishnagutta/Workday-studio-mcp.git
+git clone https://github.com/arjunsena-eze/Workday-studio-mcp.git
 cd Workday-studio-mcp
 npm install
 ```
@@ -365,4 +365,4 @@ Find it with `which node`.
 
 ## License
 
-MIT
+MIT - see [LICENSE](LICENSE).
