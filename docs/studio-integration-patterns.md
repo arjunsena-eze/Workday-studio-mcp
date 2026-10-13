@@ -2229,7 +2229,7 @@ This document captures patterns confirmed against working integrations. To add a
 
 1. Verify the pattern works in at least one running integration. Patterns from documentation alone are not sufficient — Studio's behavior often differs from its docs.
 2. Strip any tenant-identifying details (hostnames, ISU usernames, project numbers tied to specific business logic, internal package names).
-3. Open a PR against `https://github.com/krishnagutta/Workday-studio-mcp` with:
+3. Open a PR against `https://github.com/arjunsena-eze/Workday-studio-mcp` with:
    - The pattern in the appropriate section
    - A minimal code example
    - The error or symptom it fixes (if applicable)
