@@ -117,10 +117,24 @@ for (const N of [1, 2, 3]) {
     }
   });
 
-  test(`scaffold with ${N} sub-flow(s) validates completely clean`, () => {
+  test(`scaffold with ${N} sub-flow(s) validates clean, reporting only its stubs`, () => {
     const sf = subFlows(N);
     const issues = validateAssembly(
       buildAssemblyXml('INT999_Test', sf, BRIEF), null, buildDiagramXml('INT999_Test', sf));
-    assert.deepEqual(issues, [], `scaffold must emit zero findings:\n${JSON.stringify(issues, null, 2)}`);
+
+    // The contract: a fresh scaffold must be openable and deployable-shaped —
+    // nothing that blocks Studio.
+    const blocking = issues.filter(i => i.severity === 'ERROR' || i.severity === 'WARNING');
+    assert.deepEqual(blocking, [],
+      `scaffold must emit no ERROR or WARNING:\n${JSON.stringify(blocking, null, 2)}`);
+
+    // A fresh scaffold is all stubs by definition, so the INFO findings are the
+    // build-progress signal, not a defect. Assert them positively: this test
+    // previously asserted zero findings and passed only because checkTodoStubs
+    // matched an id form nothing emits, so the check never ran.
+    const stubs = issues.find(i => i.code === 'TODO_STUBS_REMAINING');
+    assert.ok(stubs, 'a fresh scaffold must report its unfilled sub-flows');
+    assert.match(stubs.message, new RegExp(`^${N} sub-flow\\(s\\)`),
+      `expected exactly ${N} stubbed sub-flows, got: ${stubs.message}`);
   });
 }

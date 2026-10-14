@@ -342,12 +342,38 @@ function checkCcNote(xml, issues) {
 // ─── Rule: flag remaining TODO stubs ─────────────────────────────────────────
 
 function checkTodoStubs(xml, issues) {
-  const todos = [...xml.matchAll(/id="TODO_([^"]+)"/g)].map(m => m[1]);
-  if (todos.length > 0) {
+  // plan_integration marks an unfilled sub-flow with a single log step whose
+  // text begins "TODO:" — see buildAssemblyXml. Attribute each marker to its
+  // enclosing async-mediation by splitting on the mediation boundary, which is
+  // reliable where a non-greedy regex across the whole document is not.
+  //
+  // This previously matched `id="TODO_..."`, which nothing has ever emitted —
+  // the check silently never fired. Do not "simplify" it back to an id match.
+  const stubbed = [];
+  for (const chunk of xml.split(/<cc:async-mediation\b/).slice(1)) {
+    if (!/<cc:text>\s*TODO:/.test(chunk)) continue;
+    const id = chunk.match(/^[^>]*\bid="([^"]+)"/);
+    stubbed.push(id ? id[1] : '(unnamed mediation)');
+  }
+  if (stubbed.length > 0) {
     issues.push({
       severity: 'INFO',
       code: 'TODO_STUBS_REMAINING',
-      message: `${todos.length} sub-flow(s) still contain TODO stubs: ${todos.join(', ')}. Fill these in with update_sub_flow before testing.`,
+      message: `${stubbed.length} sub-flow(s) still contain TODO stubs: ${stubbed.join(', ')}. Fill these in with update_sub_flow before testing.`,
+    });
+  }
+
+  // Tenant-specific placeholders the generator cannot know: report aliases and
+  // WIDs. These block a deploy rather than merely a test, so report them
+  // separately from the sub-flow stubs above.
+  const placeholders = [...new Set(
+    [...xml.matchAll(/\bTODO_[A-Z][A-Z0-9_]*/g)].map(m => m[0]),
+  )];
+  if (placeholders.length > 0) {
+    issues.push({
+      severity: 'INFO',
+      code: 'TODO_PLACEHOLDERS_REMAINING',
+      message: `${placeholders.length} tenant placeholder(s) still to replace: ${placeholders.join(', ')}. Substitute real tenant values before deploying.`,
     });
   }
 }

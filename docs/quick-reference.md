@@ -9,7 +9,7 @@ for setup see the [README](../README.md).
 ## Verify an install
 
 ```bash
-npm test          # 69 tests, node:test, zero deps
+npm test          # 109 tests, node:test, zero deps
 node src/index.mjs   # should print: [studio-mcp] Server started. Workspace: <path>
 claude mcp list      # studio-mcp should report Connected
 ```
@@ -19,28 +19,69 @@ Point it at a different workspace by editing `workspace_path` in `config.json`, 
 
 ---
 
-## The 26 tools
+## The 29 tools
 
-**Navigation** — `list_studio_projects`, `list_project_files`, `read_integration_file`,
-`search_studio_files`, `get_workspace_structure`
+Each tool's full description (the text Claude reads when choosing a tool) lives at the top of
+its file in [`src/tools/`](../src/tools/).
 
-**Files** — `write_integration_file`, `copy_file_from_project`, `rename_file`,
-`delete_file`, `validate_xml_file`
+**Navigate (7)**
 
-**Project setup** — `create_studio_project`, `create_xsl_transform`
+| Tool | What it does |
+|---|---|
+| `list_workspaces` | Lists the configured workspace profiles and which one is active |
+| `set_active_workspace` | Switches to another workspace profile for the rest of the session |
+| `get_workspace_structure` | Directory tree of the workspace, or of one project (pass `project_name` on large workspaces) |
+| `list_studio_projects` | Every project, with last-modified time and transform count |
+| `list_project_files` | Files in one project, focused on `ws/WSAR-INF/` |
+| `read_integration_file` | Reads one file |
+| `search_studio_files` | Case-insensitive text search across all projects |
 
-**Assembly editing** — `list_assembly_steps`, `list_integration_params`,
-`add_assembly_step`, `update_sub_flow`, `rename_steps`, `delete_assembly_step`,
-`validate_assembly`
+**Plan and track (3)**
 
-**Planning / lifecycle** — `plan_integration` (design elicitation → skeleton generator),
-`get_workflow` (where an integration stands + the single next action)
+| Tool | What it does |
+|---|---|
+| `plan_integration` | Collects the full design brief, then generates a skeleton assembly, diagram and `aidlc-docs/` |
+| `get_workflow` | Where an integration stands and the single next action (`retrofit=true` for older projects) |
+| `create_studio_project` | Scaffolds an empty project with a blank `assembly.xml` that opens in Studio |
 
-**Reference** — `get_step_type_reference`, `lookup_soap_operations`, `get_patterns`
+**Build and edit (11)**
 
-**Diagnostics** — `parse_server_log` (auto-finds the newest `server-*.log` in `~/Downloads`)
+| Tool | What it does |
+|---|---|
+| `add_assembly_step` | Inserts a step and rewires the predecessor's `routes-to` |
+| `update_sub_flow` | Replaces the `cc:steps` body of a named sub-flow (fills TODO stubs) |
+| `rename_steps` | Renames a step ID in `assembly.xml` and `assembly-diagram.xml` together |
+| `delete_assembly_step` | Deletes a step from both files together |
+| `list_assembly_steps` | Every step with ID, type and routing, without reading the whole file |
+| `list_integration_params` | Launch parameters and integration attributes on StartHere |
+| `write_integration_file` | Writes a file after an XML well-formedness check, with a `.bak` backup |
+| `create_xsl_transform` | Blank XSLT 2.0 file with Workday namespaces |
+| `copy_file_from_project` | Copies a file (usually an XSL) between projects |
+| `rename_file` | Renames a file; refuses the core project files |
+| `delete_file` | Deletes a file with a `.bak` backup; refuses the core project files |
 
-**Knowledge capture** — `log_learning` (appends to `learnings.md`)
+**Validate (2)**
+
+| Tool | What it does |
+|---|---|
+| `validate_assembly` | The 31 Studio-specific checks listed under [Validator rule codes](#validator-rule-codes) |
+| `validate_xml_file` | Well-formedness of any XML or XSLT file, with line and column |
+
+**Reference (3)**
+
+| Tool | What it does |
+|---|---|
+| `get_step_type_reference` | Confirmed XML examples and rules for 35 step types |
+| `lookup_soap_operations` | Application name, operations and WSDL link for 38 SOAP services |
+| `get_patterns` | The curated patterns guide, by section or keyword |
+
+**Learn and diagnose (3)**
+
+| Tool | What it does |
+|---|---|
+| `parse_server_log` | Focused errors from a `server-*.log` (auto-finds the newest in `~/Downloads`) |
+| `log_learning` | Records a new gotcha in `learnings.md` (or the private overlay) |
+| `search_learnings` | Searches the recorded learnings |
 
 ---
 
@@ -104,19 +145,47 @@ validate → read → fix → write until clean, bailing if the same error repea
 
 ## Validator rule codes
 
-What `validate_assembly` can raise — worth knowing so you also know what it does *not* catch:
+The 31 checks `validate_assembly` can raise — worth knowing so you also know what it does
+*not* catch. 29 live in [`src/assembly-validator.mjs`](../src/assembly-validator.mjs); the two
+schema-derived ones live in [`src/schema-validator.mjs`](../src/schema-validator.mjs) and are
+generated from the XSDs that ship with Studio.
 
-```
-BROKEN_ROUTES_TO             BROKEN_ROUTES_RESPONSE_TO    UNRESOLVED_LOCAL_IN
-CC_NOTE_IN_ASSEMBLY          XML_COMMENTS_PRESENT         ELEMENT_INSIDE_STEPS
-SPLITTER_HAS_ROUTES_TO       LOG_HAS_CONDITION            SOAP_WITH_EXTRA_PATH
-RAAS_VIA_SOAP                MISSING_ATTR_{URL,ENDPOINT,APPLICATION,VERSION,EXTRA_PATH}
-MISSING_XSL_FILE             XSL_PARAM_OBJECT_PROP        MVEL_SEMICOLON_IN_STRING
-JAVA_TIME_IN_PER_MESSAGE_EVAL
-STALE_DIAGRAM_HREF           DIAGRAM_MISSING_ELEMENT      SEND_ERROR_ID_IN_DIAGRAM
-POSITIONAL_REF_EVEN_INDEX    POSITIONAL_REF_OUT_OF_RANGE  SWIMLANE_REF_FRAGMENT_FORM
-CROWDED_VERTICAL_SWIMLANE    REDUNDANT_VM_DISPATCH_ARROW  TODO_STUBS_REMAINING
-```
+Severity: **ERROR** — Studio rejects it or the deploy fails · **WARNING** — fails at runtime ·
+**INFO** — awareness. The rules come from failures seen in real builds.
+
+| Area | Code | Severity | Catches |
+|---|---|---|---|
+| Routing and structure | `BROKEN_ROUTES_TO` | ERROR | `routes-to` points at an id that does not exist |
+| | `BROKEN_ROUTES_RESPONSE_TO` | ERROR | `routes-response-to` points at an id that does not exist |
+| | `UNRESOLVED_LOCAL_IN` | WARNING | `vm://` call to a `cc:local-in` that is missing or misspelled |
+| | `ELEMENT_INSIDE_STEPS` | ERROR | A top-level element nested inside `cc:steps` |
+| | `SPLITTER_HAS_ROUTES_TO` | ERROR | `routes-to` on a `cc:splitter` (schema-invalid) |
+| | `CC_NOTE_IN_ASSEMBLY` | ERROR | `cc:note` in the assembly (schema-invalid, crashes the diagram) |
+| | `SCHEMA_SEQUENCE_ORDER` | ERROR | Child elements out of the order the Studio XSD requires |
+| Diagram sync | `STALE_DIAGRAM_HREF` | ERROR | Diagram references an id that no longer exists (`scala.MatchError` on open) |
+| | `DIAGRAM_MISSING_ELEMENT` | WARNING | Assembly element with no diagram entry |
+| | `XML_COMMENTS_PRESENT` | ERROR | XML comments, which shift every `@mixed` index |
+| | `POSITIONAL_REF_EVEN_INDEX` | ERROR | Even `@mixed` index in a diagram href |
+| | `POSITIONAL_REF_OUT_OF_RANGE` | ERROR | `@mixed` index past the last element |
+| | `SEND_ERROR_ID_IN_DIAGRAM` | ERROR | `cc:send-error` referenced by id (crashes the diagram) |
+| | `SWIMLANE_REF_FRAGMENT_FORM` | WARNING | Malformed swimlane reference |
+| | `CROWDED_VERTICAL_SWIMLANE` | INFO | Several work units crammed into one vertical swimlane |
+| | `REDUNDANT_VM_DISPATCH_ARROW` | INFO | Drawn `vm://` arrow that Studio never draws itself |
+| Required attributes | `MISSING_ATTR_APPLICATION` | ERROR | `cc:workday-out-soap` without `application=` |
+| | `MISSING_ATTR_VERSION` | ERROR | `cc:workday-out-soap` without `version=` |
+| | `MISSING_ATTR_EXTRA_PATH` | ERROR | `cc:workday-out-rest` without `extra-path=` |
+| | `MISSING_ATTR_ENDPOINT` | ERROR | `cc:http-out` without `endpoint=` |
+| | `MISSING_ATTR_URL` | ERROR | `cc:xslt-plus` without `url=` |
+| | `MISSING_XSL_FILE` | WARNING | Referenced XSL file not found in `WSAR-INF` |
+| | `XSL_PARAM_OBJECT_PROP` | WARNING | Object-typed prop bound to an `xsl:param` (arrives empty) |
+| Right Workday call | `RAAS_VIA_SOAP` | ERROR | A report called over SOAP; RAAS must use `cc:workday-out-rest` |
+| | `SOAP_WITH_EXTRA_PATH` | ERROR | `extra-path` on `cc:workday-out-soap` |
+| | `LOG_HAS_CONDITION` | ERROR | `condition` on `cc:log`; use `cc:cloud-log` |
+| MVEL | `MVEL_SEMICOLON_IN_STRING` | ERROR | `;` inside a string literal (fails the whole deploy) |
+| | `MVEL_BRACE_IMBALANCE` | ERROR | Unbalanced `{` `}` in an MVEL value |
+| | `JAVA_TIME_IN_PER_MESSAGE_EVAL` | WARNING | `java.time` statics in a per-message eval (fails at runtime) |
+| Completeness | `TODO_STUBS_REMAINING` | INFO | Sub-flows still holding TODO stubs |
+| | `TODO_PLACEHOLDERS_REMAINING` | INFO | Tenant placeholders still to replace before deploy |
 
 ---
 
