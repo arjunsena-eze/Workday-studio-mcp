@@ -7,7 +7,7 @@ import { writeAidlcDocs, AIDLC_DIR } from '../aidlc-docs.mjs';
 
 // ─── Design brief schema ──────────────────────────────────────────────────────
 
-const DesignBriefSchema = z.object({
+export const DesignBriefSchema = z.object({
   data_source: z.enum(['raas', 'soap-get', 'inbound-file', 'webhook', 'external-rest', 'multiple'])
     .describe('raas=Workday custom report; soap-get=Workday SOAP Get_*; inbound-file=user uploads a file; webhook=Workday event listener; external-rest=third-party API GET; multiple=more than one type'),
 
@@ -511,7 +511,7 @@ function swimlaneVertical(x, y, asyncMedId, errorLocalOutId) {
 
 // ─── Planning document ────────────────────────────────────────────────────────
 
-function buildPlanDocument(projectName, subFlows, designBrief) {
+export function buildPlanDocument(projectName, subFlows, designBrief) {
   const n = subFlows.length;
 
   const chain = subFlows.map((sf, i) => {

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Studio Integration Generator</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Studio Integration Generator</h1>
+    <p class="sub">
+      Describe the integration; get a validated Workday Studio project.
+      Workspace: <code id="workspace">loading…</code>
+    </p>
+  </header>
+
+  <main>
+    <form id="brief-form" autocomplete="off">
+      <section class="card">
+        <h2>Project</h2>
+        <label class="field">
+          <span class="label">Project name</span>
+          <input type="text" id="project_name" name="project_name"
+                 placeholder="INT145_Worker_Export" spellcheck="false" required>
+          <span class="hint">Letters, digits and underscores. This becomes the folder name in the workspace.</span>
+        </label>
+      </section>
+
+      <div id="schema-fields"><p class="loading">Loading the design brief schema…</p></div>
+
+      <div class="actions">
+        <button type="submit" id="generate-btn">Generate project</button>
+        <span id="form-status" class="status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+
+    <section id="result" class="card result" hidden>
+      <h2>Result</h2>
+      <div id="result-body"></div>
+    </section>
+  </main>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

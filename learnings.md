@@ -1403,3 +1403,33 @@ confirm it reports exactly that error.
 ```
 **Promote to**: validate-assembly.mjs
 **Status**: raw
+
+### [2026-08-12] XML to JSON has no native step — cc:xslt-plus + an XSLT 1.0 recursive escape template is the route
+**Category**: XSLT
+**Trigger**: Building a RAAS-to-JSON sample. Studio ships cc:json-to-xml and cc:xml-to-csv but there is NO cc:xml-to-json step, so the JSON has to be generated as text by a stylesheet.
+**Pattern**: There is no cc:xml-to-json inverse of cc:json-to-xml. Emit JSON with cc:xslt-plus output-mimetype="application/json" and a stylesheet using xsl:output method="text". Two things make the output actually valid rather than merely plausible: (1) JSON string escaping must be hand-rolled because XSLT 1.0 has no replace() — use a recursive substring-before/substring-after replace-all template, and escape the BACKSLASH FIRST, before the double quote and the control characters, otherwise the backslashes the template itself introduces get escaped a second time and the document is corrupt in exactly the fields that needed escaping; (2) distinguish absent/empty elements from empty strings — test string-length(normalize-space($value))=0 and emit bare null (no quotes), since an omitted report column and a blank one both arrive as an empty node-set. Comma placement is cleanest with a "first" boolean param on the field template plus position()&gt;1 for array separators, which also makes the zero-record case degrade to "workers": [] with no trailing comma. Pair with format=simplexml on the RAAS call so the stylesheet matches Report_Data/Report_Entry with no namespace prefix, and remember only String-typed props bind to xsl:param (coerce with props['x'] = '' + props['y']). Verified offline against a 3-row and a 0-row response: output parsed clean, with an embedded double quote, a backslash, and a tab all round-tripping correctly and missing/empty columns landing as JSON null.
+**Example**:
+```xml
+&lt;cc:xslt-plus id="TransformXmlToJson" output-mimetype="application/json" url="WorkerXmlToJson.xsl"/&gt;
+
+&lt;!-- escape order is load-bearing: backslash BEFORE quote --&gt;
+&lt;xsl:template name="json-escape"&gt;
+  &lt;xsl:param name="text"/&gt;
+  &lt;xsl:variable name="s1"&gt;&lt;xsl:call-template name="replace-all"&gt;
+    &lt;xsl:with-param name="text" select="$text"/&gt;
+    &lt;xsl:with-param name="find" select="'\'"/&gt;
+    &lt;xsl:with-param name="replace" select="'\\'"/&gt;
+  &lt;/xsl:call-template&gt;&lt;/xsl:variable&gt;
+  &lt;xsl:variable name="s2"&gt;&lt;xsl:call-template name="replace-all"&gt;
+    &lt;xsl:with-param name="text" select="$s1"/&gt;
+    &lt;xsl:with-param name="find" select="'&amp;quot;'"/&gt;
+    &lt;xsl:with-param name="replace" select="'\&amp;quot;'"/&gt;
+  &lt;/xsl:call-template&gt;&lt;/xsl:variable&gt;
+  &lt;!-- then &amp;#13; -&gt; \r, &amp;#10; -&gt; \n, &amp;#9; -&gt; \t --&gt;
+&lt;/xsl:template&gt;
+
+&lt;!-- absent or blank column becomes JSON null, not "" --&gt;
+&lt;xsl:when test="string-length(normalize-space($value)) = 0"&gt;&lt;xsl:text&gt;null&lt;/xsl:text&gt;&lt;/xsl:when&gt;
+```
+**Promote to**: all
+**Status**: raw

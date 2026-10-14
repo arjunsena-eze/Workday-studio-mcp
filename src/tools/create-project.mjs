@@ -51,7 +51,7 @@ export function register(server) {
   );
 }
 
-async function createProjectScaffold(projectPath, projectName) {
+export async function createProjectScaffold(projectPath, projectName) {
   await mkdir(join(projectPath, '.settings'), { recursive: true });
   await mkdir(join(projectPath, 'build', 'classes'), { recursive: true });
   await mkdir(join(projectPath, 'src', 'main', 'java'), { recursive: true });
